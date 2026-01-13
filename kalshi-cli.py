@@ -38,6 +38,19 @@ KALSHI_API_URL = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_WS_URL = "wss://api.elections.kalshi.com/trade-api/ws/v2"
 CONFIG_FILE = Path.home() / ".kalshi-cli.json"
 
+SPINNER_FRAMES = ['|', '/', '-', '\\']
+
+
+def get_spinner_frame(index):
+    """Get spinner character for given index."""
+    return SPINNER_FRAMES[index % len(SPINNER_FRAMES)]
+
+
+def print_spinner(frame):
+    """Update spinner line, cursor stays on line below."""
+    sys.stdout.write(f"\033[A\r  Press Ctrl+C to exit {frame}\n")
+    sys.stdout.flush()
+
 
 def load_config():
     """Load config from file if it exists."""
@@ -116,6 +129,7 @@ class ContractReader:
         self.api_key = api_key
         self.api_secret = api_secret
         self.current_data = {}
+        self.spinner_index = 0
 
     def fetch_initial_data(self):
         """Fetch initial market data via REST API."""
@@ -188,8 +202,8 @@ class ContractReader:
 
         print("\n" + "=" * 60)
         print(f"  Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("  Press Ctrl+C to exit")
         print("=" * 60)
+        print(f"  Press Ctrl+C to exit {get_spinner_frame(self.spinner_index)}")
 
     def update_from_message(self, msg: dict):
         msg_type = msg.get("type")
@@ -291,15 +305,21 @@ class ContractReader:
                 ) as ws:
                     await self.subscribe(ws)
 
-                    async for message in ws:
+                    while True:
                         try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=0.2)
                             msg = json.loads(message)
                             old_data = dict(self.current_data)
                             self.update_from_message(msg)
                             if self.current_data != old_data:
                                 self.display_contract()
+                        except asyncio.TimeoutError:
+                            pass
                         except json.JSONDecodeError:
                             continue
+                        # Update spinner on every iteration
+                        self.spinner_index += 1
+                        print_spinner(get_spinner_frame(self.spinner_index))
 
             except websockets.exceptions.ConnectionClosed:
                 print("\nConnection closed. Reconnecting in 5 seconds...")
