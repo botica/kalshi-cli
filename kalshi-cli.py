@@ -217,15 +217,10 @@ class ContractReader:
         elif msg_type == "ticker":
             data = msg.get("msg", {})
             if data.get("market_ticker") == self.contract_id:
-                self.current_data.update({
-                    "yes_bid": data.get("yes_bid"),
-                    "yes_ask": data.get("yes_ask"),
-                    "no_bid": data.get("no_bid"),
-                    "no_ask": data.get("no_ask"),
-                    "last_price": data.get("last_price"),
-                    "volume": data.get("volume"),
-                    "open_interest": data.get("open_interest"),
-                })
+                # Only update fields that are actually present in the message
+                for key in ["yes_bid", "yes_ask", "no_bid", "no_ask", "last_price", "volume", "open_interest"]:
+                    if key in data:
+                        self.current_data[key] = data[key]
 
         elif msg_type == "trade":
             data = msg.get("msg", {})
@@ -236,14 +231,10 @@ class ContractReader:
         elif msg_type == "market":
             data = msg.get("msg", {})
             if data.get("ticker") == self.contract_id:
-                self.current_data.update({
-                    "title": data.get("title"),
-                    "status": data.get("status"),
-                    "yes_bid": data.get("yes_bid"),
-                    "yes_ask": data.get("yes_ask"),
-                    "volume": data.get("volume"),
-                    "open_interest": data.get("open_interest"),
-                })
+                # Only update fields that are actually present in the message
+                for key in ["title", "status", "yes_bid", "yes_ask", "volume", "open_interest"]:
+                    if key in data:
+                        self.current_data[key] = data[key]
 
     async def subscribe(self, ws):
         await ws.send(json.dumps({
@@ -337,7 +328,7 @@ def main():
 
     if args.command == "reader":
         api_key, private_key = get_credentials()
-        reader = ContractReader(args.contract_id, api_key, private_key)
+        reader = ContractReader(args.contract_id.upper(), api_key, private_key)
         try:
             asyncio.run(reader.run())
         except KeyboardInterrupt:
