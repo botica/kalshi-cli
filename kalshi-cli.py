@@ -17,22 +17,21 @@ from pathlib import Path
 try:
     import websockets
 except ImportError:
-    print("Error: websockets package required. Install with: pip install websockets")
+    print("error: websockets package required. install with: pip install websockets")
     sys.exit(1)
 
 try:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
 except ImportError:
-    print("Error: cryptography package required. Install with: pip install cryptography")
+    print("error: cryptography package required. install with: pip install cryptography")
     sys.exit(1)
 
 try:
     import requests
 except ImportError:
-    print("Error: requests package required. Install with: pip install requests")
+    print("error: requests package required. install with: pip install requests")
     sys.exit(1)
-
 
 KALSHI_API_URL = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_WS_URL = "wss://api.elections.kalshi.com/trade-api/ws/v2"
@@ -48,7 +47,7 @@ def get_spinner_frame(index):
 
 def print_spinner(frame):
     """Update spinner line, cursor stays on line below."""
-    sys.stdout.write(f"\033[A\r  Press Ctrl+C to exit {frame}\n")
+    sys.stdout.write(f"\033[A\rpress ctrl+c to exit {frame}\n")
     sys.stdout.flush()
 
 
@@ -80,10 +79,10 @@ def get_credentials():
     if config and config.get("api_key") and config.get("private_key"):
         return config["api_key"], config["private_key"]
 
-    print("Enter your Kalshi API credentials:")
-    api_key = input("API Key: ").strip()
+    print("enter your kalshi api credentials:")
+    api_key = input("api key: ").strip()
 
-    print("Paste your private key (including BEGIN/END lines):")
+    print("paste your private key (including BEGIN/END lines):")
     lines = []
     while True:
         line = input()
@@ -93,7 +92,7 @@ def get_credentials():
     private_key = "\n".join(lines)
 
     if not api_key or not private_key:
-        print("Error: API key and private key are required")
+        print("error: api key and private key are required")
         sys.exit(1)
 
     save_config(api_key, private_key)
@@ -132,24 +131,20 @@ class ContractReader:
         self.spinner_index = 0
 
     def fetch_initial_data(self):
-        """Fetch initial market data via REST API."""
         path = f"/markets/{self.contract_id}"
         timestamp = str(int(time.time() * 1000))
         signature = sign_request(self.api_secret, timestamp, "GET", f"/trade-api/v2{path}")
-
         headers = {
             "KALSHI-ACCESS-KEY": self.api_key,
             "KALSHI-ACCESS-SIGNATURE": signature,
             "KALSHI-ACCESS-TIMESTAMP": timestamp,
         }
-
         try:
             resp = requests.get(f"{KALSHI_API_URL}{path}", headers=headers, timeout=10)
             if resp.status_code == 200:
                 data = resp.json().get("market", {})
                 self.current_data = {
                     "title": data.get("title"),
-                    "subtitle": data.get("subtitle"),
                     "status": data.get("status"),
                     "yes_bid": data.get("yes_bid"),
                     "yes_ask": data.get("yes_ask"),
@@ -159,8 +154,8 @@ class ContractReader:
                     "volume": data.get("volume"),
                     "open_interest": data.get("open_interest"),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"warning: could not fetch initial data: {e}")
 
     def clear_screen(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -172,83 +167,47 @@ class ContractReader:
 
     def display_contract(self):
         self.clear_screen()
-
         print("=" * 60)
-        print(f"  CONTRACT: {self.contract_id}")
+        print(f"contract: {self.contract_id}")
         print("=" * 60)
-
         if not self.current_data:
-            print("\n  Waiting for data...\n")
+            print("waiting for data...")
         else:
             data = self.current_data
-
-            print(f"\n  Title: {data.get('title', 'N/A')}")
-            print(f"  Status: {data.get('status', 'N/A')}")
-
-            print("\n  --- Pricing ---")
-            print(f"  Yes Bid:  {self.format_price(data.get('yes_bid'))}")
-            print(f"  Yes Ask:  {self.format_price(data.get('yes_ask'))}")
-            print(f"  No Bid:   {self.format_price(data.get('no_bid'))}")
-            print(f"  No Ask:   {self.format_price(data.get('no_ask'))}")
-
+            print(f"title: {data.get('title', 'N/A')}")
+            print(f"status: {data.get('status', 'N/A')}")
+            print("--- pricing ---")
+            print(f"yes bid: {self.format_price(data.get('yes_bid'))}")
+            print(f"yes ask: {self.format_price(data.get('yes_ask'))}")
+            print(f"no bid: {self.format_price(data.get('no_bid'))}")
+            print(f"no ask: {self.format_price(data.get('no_ask'))}")
             if 'last_price' in data:
-                print(f"\n  Last Price: {self.format_price(data.get('last_price'))}")
-
+                print(f"last price: {self.format_price(data.get('last_price'))}")
             if 'volume' in data:
-                print(f"  Volume: {data.get('volume', 0):,}")
-
+                print(f"volume: {data.get('volume', 0):,}")
             if 'open_interest' in data:
-                print(f"  Open Interest: {data.get('open_interest', 0):,}")
-
-        print("\n" + "=" * 60)
-        print(f"  Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"open interest: {data.get('open_interest', 0):,}")
         print("=" * 60)
-        print(f"  Press Ctrl+C to exit {get_spinner_frame(self.spinner_index)}")
+        print(f"last update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60)
+        print(f"press ctrl+c to exit {get_spinner_frame(self.spinner_index)}")
 
     def update_from_message(self, msg: dict):
         msg_type = msg.get("type")
-
-        if msg_type == "orderbook_snapshot":
-            data = msg.get("msg", {})
-            if data.get("market_ticker") == self.contract_id:
-                yes_bids = data.get("yes", [])
-                no_bids = data.get("no", [])
-                if yes_bids:
-                    self.current_data["yes_bid"] = yes_bids[0][0] if yes_bids else None
-                if no_bids:
-                    self.current_data["no_bid"] = no_bids[0][0] if no_bids else None
-
+        data = msg.get("msg", {})
+        if data.get("market_ticker") != self.contract_id:
+            return
+        if msg_type == "ticker":
+            for key in ["yes_bid", "yes_ask", "no_bid", "no_ask", "last_price", "volume", "open_interest"]:
+                if key in data:
+                    self.current_data[key] = data[key]
         elif msg_type == "orderbook_delta":
-            data = msg.get("msg", {})
-            if data.get("market_ticker") == self.contract_id:
-                if "price" in data:
-                    side = data.get("side")
-                    if side == "yes":
-                        self.current_data["yes_bid"] = data.get("price")
-                    elif side == "no":
-                        self.current_data["no_bid"] = data.get("price")
-
-        elif msg_type == "ticker":
-            data = msg.get("msg", {})
-            if data.get("market_ticker") == self.contract_id:
-                # Only update fields that are actually present in the message
-                for key in ["yes_bid", "yes_ask", "no_bid", "no_ask", "last_price", "volume", "open_interest"]:
-                    if key in data:
-                        self.current_data[key] = data[key]
-
-        elif msg_type == "trade":
-            data = msg.get("msg", {})
-            if data.get("market_ticker") == self.contract_id:
-                self.current_data["last_price"] = data.get("yes_price")
-                self.current_data["volume"] = data.get("volume", self.current_data.get("volume", 0))
-
-        elif msg_type == "market":
-            data = msg.get("msg", {})
-            if data.get("ticker") == self.contract_id:
-                # Only update fields that are actually present in the message
-                for key in ["title", "status", "yes_bid", "yes_ask", "volume", "open_interest"]:
-                    if key in data:
-                        self.current_data[key] = data[key]
+            if "price" in data:
+                side = data.get("side")
+                if side == "yes":
+                    self.current_data["yes_bid"] = data.get("price")
+                elif side == "no":
+                    self.current_data["no_bid"] = data.get("price")
 
     async def subscribe(self, ws):
         await ws.send(json.dumps({
@@ -267,14 +226,6 @@ class ContractReader:
                 "market_tickers": [self.contract_id]
             }
         }))
-        await ws.send(json.dumps({
-            "id": 3,
-            "cmd": "subscribe",
-            "params": {
-                "channels": ["trade"],
-                "market_tickers": [self.contract_id]
-            }
-        }))
 
     async def run(self):
         self.fetch_initial_data()
@@ -289,8 +240,8 @@ class ContractReader:
                 try:
                     signature = sign_request(self.api_secret, timestamp, "GET", path)
                 except Exception as e:
-                    print(f"Error signing request: {e}")
-                    print("Make sure your private key is valid PEM format")
+                    print(f"error signing request: {e}")
+                    print("make sure your private key is valid PEM format")
                     sys.exit(1)
 
                 headers = {
@@ -317,15 +268,14 @@ class ContractReader:
                             pass
                         except json.JSONDecodeError:
                             continue
-                        # Update spinner on every iteration
                         self.spinner_index += 1
                         print_spinner(get_spinner_frame(self.spinner_index))
 
             except websockets.exceptions.ConnectionClosed:
-                print("\nConnection closed. Reconnecting in 5 seconds...")
+                print("\nconnection closed. reconnecting in 5 seconds...")
                 await asyncio.sleep(5)
             except Exception as e:
-                print(f"\nError: {e}. Reconnecting in 5 seconds...")
+                print(f"\nerror: {e}. reconnecting in 5 seconds...")
                 await asyncio.sleep(5)
 
 
@@ -352,7 +302,7 @@ def main():
         try:
             asyncio.run(reader.run())
         except KeyboardInterrupt:
-            print("\n\nExiting...")
+            print("\n\nexiting...")
             sys.exit(0)
     else:
         parser.print_help()
